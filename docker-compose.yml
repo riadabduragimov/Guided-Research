@@ -199,7 +199,7 @@ services:
         MYSQL_PASSWORD: secret
         
   streamlit:
-    image: streamlit  # Your custom built image
+    image: streamlit  
     container_name: streamlit
     ports:
       - "8501:8501"
