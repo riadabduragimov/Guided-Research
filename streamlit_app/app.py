@@ -1,253 +1,265 @@
-import streamlit as st 
+import streamlit as st
 import psycopg2
 import pandas as pd
-from pyspark.sql import SparkSession
-from rules import explain_plan_text, explain_query_text
 import pyspark
-import time  # <-- for timing queries
+from pyspark.sql import SparkSession
+import time
+import plotly.express as px  
+from rules import explain_plan_text, explain_query_text
+from visualization import extract_operators_and_costs, plot_cost_heatmap, visualize_hive_operator_weights
+from constants import operator_weights  
 
-# Import visualization functions from visualization.py
-from visualization import (
-    extract_operators_and_costs,
-    plot_cost_heatmap,
-    visualize_hive_operator_weights
-)
+st.set_page_config(page_title="Hive & PostgreSQL Query Analyzer", layout="wide")
+st.title("Data Query Analyzer: Hive via Spark & PostgreSQL Metastore")
 
-st.title("Hive Metastore PostgreSQL & Spark Viewer")
+session_defaults = {
+    'show_hive_vis': False,
+    'show_pg_vis': False,
+    'show_hive_cost_scale': False,
+    'show_pg_cost_scale': False,
+    'pg_vis_fig': None,
+    'hive_vis_fig': None,
+    'hive_cost_scale_fig': None,
+    'pg_cost_scale_fig': None,
+    'hive_query_result': None,
+    'hive_query_error': None,
+    'hive_query_exec_time': None,
+    'hive_query_suggestion': None,
+    'hive_explain': None,
+    'hive_explain_error': None,
+    'hive_explain_nl': None,
+    'pg_query_result': None,
+    'pg_query_error': None,
+    'pg_query_exec_time': None,
+    'pg_explain': None,
+    'pg_explain_error': None
+}
+for key, default in session_defaults.items():
+    st.session_state.setdefault(key, default)
 
-# Initialize session state flags & figures if not present
-if 'show_hive_vis' not in st.session_state:
-    st.session_state['show_hive_vis'] = False
-if 'show_pg_vis' not in st.session_state:
-    st.session_state['show_pg_vis'] = False
-if 'pg_vis_fig' not in st.session_state:
-    st.session_state['pg_vis_fig'] = None
-if 'hive_vis_fig' not in st.session_state:
-    st.session_state['hive_vis_fig'] = None
+# --- Helper Functions ---
 
-# Sidebar navigation
-page = st.sidebar.selectbox("Select Page", ["Hive", "PostgreSQL"])
+def display_query_results(result_df, exec_time, label):
+    st.write(f"### Results from {label}")
+    st.dataframe(result_df)
+    if exec_time is not None:
+        st.write(f"Query Execution Time: {exec_time:.3f} seconds")
 
-if page == "Hive":
-    st.header("PySpark Hive Connection")
-    st.write(f"PySpark version: {pyspark.__version__}")
+def display_explain_plan(plan_text, natural_language=None):
+    st.write("### Query Execution Plan")
+    st.code(plan_text, language='sql')
+    if natural_language:
+        st.write("### Natural Language Interpretation")
+        for line in natural_language.split("\n"):
+            st.markdown(f"- {line}")
+
+def display_query_suggestions(suggestions, title="Query Optimization Suggestions"):
+    if suggestions:
+        st.write(f"### {title}")
+        for line in suggestions.split("\n"):
+            st.markdown(f"- {line}")
+
+
+# --- Sidebar Navigation ---
+page = st.sidebar.selectbox("Select Environment", ["Hive Query Inspector", "Metastore Explorer (PostgreSQL)"])
+
+# --- HIVE PAGE ---
+if page == "Hive Query Inspector":
+    st.header("Explore Hive Tables Using PySpark + Hive Metastore")
+    st.caption(f"Using PySpark version: {pyspark.__version__}")
 
     try:
         spark = (
             SparkSession.builder
             .appName("HiveSparkIntegration")
-            .master("spark://spark-master:7077")  # Adjust as needed
+            .master("spark://spark-master:7077")
             .config("spark.sql.catalogImplementation", "hive")
             .config("spark.hadoop.hive.metastore.uris", "thrift://hive-metastore:9083")
             .enableHiveSupport()
             .getOrCreate()
         )
+        st.success("Spark session initialized successfully.")
 
-        st.success("✅ SparkSession connected to Hive Metastore!")
+        hive_query = st.text_area("Enter your SQL query on Hive tables", "SELECT * FROM test_db.customer LIMIT 5;")
 
-        hive_query = st.text_area("Write your Hive SQL query here:", "SELECT * FROM test_db.customer LIMIT 5;")
-        col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
+        col1, col2, col3, col4, col5 = st.columns(5)  
 
         with col1:
-            if st.button("Run Hive Query"):
-                # Clear previous explain plan, explanation, and visualization
-                st.session_state['hive_explain'] = None
-                st.session_state['hive_explain_error'] = None
-                st.session_state['hive_explain_nl'] = None
-                st.session_state['hive_vis_fig'] = None
-                st.session_state['show_hive_vis'] = False
-                st.session_state['hive_query_suggestion'] = None  # Clear old suggestions
-
+            if st.button("Run Query"):
                 try:
-                    start_time = time.time()  # start timer
-                    hive_df = spark.sql(hive_query)
-                    pandas_df = hive_df.toPandas()
-                    end_time = time.time()  # end timer
-                    elapsed_time = end_time - start_time
+                    start = time.time()
+                    result = spark.sql(hive_query).toPandas()
+                    elapsed = time.time() - start
 
-                    st.session_state['hive_query_result'] = pandas_df
+                    st.session_state['hive_query_result'] = result
+                    st.session_state['hive_query_exec_time'] = elapsed
+                    st.session_state['hive_query_suggestion'] = explain_query_text(hive_query)
                     st.session_state['hive_query_error'] = None
-                    st.session_state['hive_query_exec_time'] = elapsed_time
 
-                    # Get query text suggestions
-                    query_suggestion = explain_query_text(hive_query)
-                    st.session_state['hive_query_suggestion'] = query_suggestion
-
-                except Exception as query_err:
-                    st.session_state['hive_query_error'] = f"❌ Error executing Hive query: {query_err}"
+                except Exception as e:
+                    st.session_state['hive_query_error'] = str(e)
                     st.session_state['hive_query_result'] = None
-                    st.session_state['hive_query_exec_time'] = None
-                    st.session_state['hive_query_suggestion'] = None
 
         with col2:
-            if st.button("Explain Hive Query"):
+            if st.button("Explain Plan"):
                 try:
-                    explain_query = f"EXPLAIN FORMATTED {hive_query}"
-                    explain_df = spark.sql(explain_query)
-                    plan_text = "\n".join(explain_df.toPandas().iloc[:, 0].tolist())
-                    st.session_state['hive_explain'] = plan_text
+                    explain_df = spark.sql(f"EXPLAIN FORMATTED {hive_query}")
+                    st.session_state['hive_explain'] = "\n".join(explain_df.toPandas().iloc[:, 0])
                     st.session_state['hive_explain_error'] = None
-                    st.session_state['hive_explain_nl'] = None
-                except Exception as explain_err:
-                    st.session_state['hive_explain_error'] = f"❌ Error getting EXPLAIN plan: {explain_err}"
+                except Exception as e:
+                    st.session_state['hive_explain_error'] = str(e)
                     st.session_state['hive_explain'] = None
-                    st.session_state['hive_explain_nl'] = None
 
         with col3:
-            if st.button("Explain EXPLAIN Plan (Natural Language)"):
-                if 'hive_explain' in st.session_state and st.session_state['hive_explain']:
-                    explanation = explain_plan_text(st.session_state['hive_explain'])
-                    st.session_state['hive_explain_nl'] = explanation
-                else:
-                    st.warning("Run 'Explain Hive Query' first to get the EXPLAIN plan.")
+            if st.button("Natural Language Plan"):
+                if st.session_state['hive_explain']:
+                    st.session_state['hive_explain_nl'] = explain_plan_text(st.session_state['hive_explain'])
 
         with col4:
-            if st.button("Visualize Hive Operator Weights"):
-                if 'hive_explain' in st.session_state and st.session_state['hive_explain']:
+            if st.button("Visualize Plan"):
+                if st.session_state['hive_explain']:
                     fig = visualize_hive_operator_weights(st.session_state['hive_explain'])
-                    if fig is not None:
+                    if fig:
                         st.session_state['hive_vis_fig'] = fig
                         st.session_state['show_hive_vis'] = True
                     else:
-                        st.warning("No operators detected in the Hive EXPLAIN plan.")
-                else:
-                    st.warning("Run 'Explain Hive Query' first to visualize operator weights.")
+                        st.warning("No visualizable operators found.")
 
-        if st.session_state.get('show_hive_vis', False):
-            with st.expander("Hive Operator Weights Visualization (Click to collapse)", expanded=True):
-                st.plotly_chart(st.session_state['hive_vis_fig'], use_container_width=True)
-                if st.button("Close Hive Visualization"):
+        with col5:
+            if st.button("Show Cost Scale"):
+                df_scale = pd.DataFrame({
+                    "Operator": list(operator_weights.keys()),
+                    "Weight": list(operator_weights.values())
+                })
+                fig_scale = px.bar(
+                    df_scale, x="Operator", y="Weight",
+                    color="Operator",
+                    title="Reference Cost Scale of Spark Execution Operators",
+                    text="Weight"
+                )
+                fig_scale.update_layout(
+                    autosize=True,
+                    width=None,
+                    height=400,
+                    margin=dict(l=40, r=40, t=40, b=40),
+                    xaxis_title="Operator Type",
+                    yaxis_title="Weight"
+                )
+                st.session_state['hive_cost_scale_fig'] = fig_scale
+                st.session_state['show_hive_cost_scale'] = True
+
+        # Results and Visuals
+        if st.session_state['hive_query_result'] is not None:
+            display_query_results(st.session_state['hive_query_result'], st.session_state['hive_query_exec_time'], "Hive via Spark")
+
+        if st.session_state['hive_query_error']:
+            st.error(st.session_state['hive_query_error'])
+
+        display_query_suggestions(st.session_state['hive_query_suggestion'])
+
+        if st.session_state['hive_explain']:
+            display_explain_plan(st.session_state['hive_explain'], st.session_state.get('hive_explain_nl'))
+
+        if st.session_state['show_hive_vis']:
+            with st.expander("Operator Visualization"):
+                st.plotly_chart(st.session_state['hive_vis_fig'], use_container_width=True, key="hive_vis")
+                if st.button("Hide Visualization"):
                     st.session_state['show_hive_vis'] = False
                     st.experimental_rerun()
 
-        # Display Hive results
-        if st.session_state.get('hive_query_result') is not None:
-            st.write("### Query Results from Hive via PySpark")
-            st.dataframe(st.session_state['hive_query_result'])
-
-            if st.session_state.get('hive_query_exec_time') is not None:
-                st.write(f"⏱️ Query execution time: {st.session_state['hive_query_exec_time']:.3f} seconds")
-
-        if st.session_state.get('hive_query_error') is not None:
-            st.error(st.session_state['hive_query_error'])
-
-        # Show Query Text Suggestions under results
-        if st.session_state.get('hive_query_suggestion') is not None:
-            st.write("### Query Text Suggestions")
-            for line in st.session_state['hive_query_suggestion'].split("\n"):
-                st.markdown(f"- {line}")
-
-        if st.session_state.get('hive_explain') is not None:
-            st.write("### EXPLAIN Plan for Hive Query")
-            st.code(st.session_state['hive_explain'], language='sql')
-
-        if st.session_state.get('hive_explain_error') is not None:
-            st.error(st.session_state['hive_explain_error'])
-
-        if st.session_state.get('hive_explain_nl') is not None:
-            st.write("### Natural Language Explanation of EXPLAIN Plan")
-            for line in st.session_state['hive_explain_nl'].split("\n"):
-                st.markdown(f"- {line}")
-
-            # Also remind query suggestions here for convenience
-            if st.session_state.get('hive_query_suggestion') is not None:
-                st.write("### Query Text Suggestions (Reminder)")
-                for line in st.session_state['hive_query_suggestion'].split("\n"):
-                    st.markdown(f"- {line}")
+        if st.session_state['show_hive_cost_scale']:
+            with st.expander("Operator Cost Scale"):
+                st.plotly_chart(st.session_state['hive_cost_scale_fig'], use_container_width=True, key="hive_cost_scale")
+                if st.button("Hide Cost Scale"):
+                    st.session_state['show_hive_cost_scale'] = False
+                    st.experimental_rerun()
 
     except Exception as e:
-        st.error(f"❌ Error connecting with PySpark: {e}")
+        st.error(f"Could not initialize SparkSession: {e}")
 
-elif page == "PostgreSQL":
-    st.header("PostgreSQL Hive Metastore Connection")
-    host = "hive-metastore-postgresql"
-    port = 5432
-    dbname = "metastore"
-    user = "hive"
-    password = "hive"
+# --- POSTGRESQL PAGE ---
+elif page == "Metastore Explorer (PostgreSQL)":
+    st.header("Analyze Hive Metastore with PostgreSQL")
+    host, port, dbname, user, password = "hive-metastore-postgresql", 5432, "metastore", "hive", "hive"
 
     try:
-        conn = psycopg2.connect(
-            host=host,
-            port=port,
-            database=dbname,
-            user=user,
-            password=password
-        )
-        st.success("✅ Connected to Hive Metastore PostgreSQL!")
+        conn = psycopg2.connect(host=host, port=port, database=dbname, user=user, password=password)
+        st.success("Connected to PostgreSQL Hive Metastore.")
 
-        pg_query = st.text_area("Write your PostgreSQL Metastore query here:", 'SELECT * FROM "DBS" LIMIT 5;')
-        col5, col6, col7 = st.columns([1, 1, 1])
+        pg_query = st.text_area("Enter your PostgreSQL query", 'SELECT * FROM "DBS" LIMIT 5;')
+        col1, col2, col3, col4 = st.columns(4)  
 
-        with col5:
-            if st.button("Run PostgreSQL Query"):
+        with col1:
+            if st.button("Run Query"):
                 try:
-                    start_time = time.time()
-                    pg_df = pd.read_sql(pg_query, conn)
-                    end_time = time.time()
-                    elapsed_time = end_time - start_time
+                    start = time.time()
+                    df = pd.read_sql(pg_query, conn)
+                    elapsed = time.time() - start
 
-                    st.session_state['pg_query_result'] = pg_df
+                    st.session_state['pg_query_result'] = df
+                    st.session_state['pg_query_exec_time'] = elapsed
                     st.session_state['pg_query_error'] = None
-                    st.session_state['pg_query_exec_time'] = elapsed_time
 
-                except Exception as pg_err:
-                    st.session_state['pg_query_error'] = f"❌ Error executing PostgreSQL query: {pg_err}"
+                except Exception as e:
+                    st.session_state['pg_query_error'] = str(e)
                     st.session_state['pg_query_result'] = None
-                    st.session_state['pg_query_exec_time'] = None
 
-        with col6:
-            if st.button("Explain PostgreSQL Query"):
+        with col2:
+            if st.button("Explain Plan"):
                 try:
-                    explain_pg_query = f"EXPLAIN {pg_query}"
-                    explain_df = pd.read_sql(explain_pg_query, conn)
-                    plan_text = "\n".join(explain_df.iloc[:, 0].tolist())
-                    st.session_state['pg_explain'] = plan_text
+                    explain_df = pd.read_sql(f"EXPLAIN {pg_query}", conn)
+                    st.session_state['pg_explain'] = "\n".join(explain_df.iloc[:, 0])
                     st.session_state['pg_explain_error'] = None
-                except Exception as explain_err:
-                    st.session_state['pg_explain_error'] = f"❌ Error getting EXPLAIN plan for PostgreSQL: {explain_err}"
-                    st.session_state['pg_explain'] = None
+                except Exception as e:
+                    st.session_state['pg_explain_error'] = str(e)
 
-        with col7:
-            if st.button("Visualize PostgreSQL Plan Costs"):
-                if 'pg_explain' in st.session_state and st.session_state['pg_explain']:
-                    operators, costs = extract_operators_and_costs(st.session_state['pg_explain'])
-                    if operators:
-                        fig = plot_cost_heatmap(operators, costs)
-                        if fig is not None:
-                            st.session_state['pg_vis_fig'] = fig
-                            st.session_state['show_pg_vis'] = True
+        with col3:
+            if st.button("Visualize Cost Plan"):
+                if st.session_state['pg_explain']:
+                    ops, costs = extract_operators_and_costs(st.session_state['pg_explain'])
+                    if ops:
+                        fig = plot_cost_heatmap(ops, costs)
+                        st.session_state['pg_vis_fig'] = fig
+                        st.session_state['show_pg_vis'] = True
+
+        with col4:
+            if st.button("Show Cost Scale"):
+                if st.session_state['pg_explain']:
+                    ops, costs = extract_operators_and_costs(st.session_state['pg_explain'])
+                    if ops:
+                        fig = plot_cost_heatmap(ops, costs)
+                        st.session_state['pg_cost_scale_fig'] = fig
+                        st.session_state['show_pg_cost_scale'] = True
                     else:
-                        st.warning("No operator cost data found in the plan.")
-                else:
-                    st.warning("Run 'Explain PostgreSQL Query' first to get the EXPLAIN plan.")
+                        st.warning("No cost data found for scale.")
 
-        if st.session_state.get('show_pg_vis', False):
-            with st.expander("PostgreSQL Plan Cost Heatmap (Click to collapse)", expanded=True):
-                st.plotly_chart(st.session_state['pg_vis_fig'], use_container_width=True)
-                if st.button("Close PostgreSQL Visualization"):
+        if st.session_state['pg_query_result'] is not None:
+            display_query_results(st.session_state['pg_query_result'], st.session_state['pg_query_exec_time'], "PostgreSQL Metastore")
+
+        if st.session_state['pg_query_error']:
+            st.error(st.session_state['pg_query_error'])
+
+        if st.session_state['pg_explain']:
+            display_explain_plan(st.session_state['pg_explain'])
+
+        if st.session_state['pg_explain_error']:
+            st.error(st.session_state['pg_explain_error'])
+
+        if st.session_state['show_pg_vis']:
+            with st.expander("PostgreSQL Plan Heatmap"):
+                st.plotly_chart(st.session_state['pg_vis_fig'], use_container_width=True, key="pg_vis")
+                if st.button("Hide PostgreSQL Visualization"):
                     st.session_state['show_pg_vis'] = False
                     st.experimental_rerun()
 
-        # Display PostgreSQL results
-        if st.session_state.get('pg_query_result') is not None:
-            st.write("### Query Results from PostgreSQL Metastore")
-            st.dataframe(st.session_state['pg_query_result'])
-
-            if st.session_state.get('pg_query_exec_time') is not None:
-                st.write(f"⏱️ Query execution time: {st.session_state['pg_query_exec_time']:.3f} seconds")
-
-        if st.session_state.get('pg_query_error') is not None:
-            st.error(st.session_state['pg_query_error'])
-
-        if st.session_state.get('pg_explain') is not None:
-            st.write("### EXPLAIN Plan for PostgreSQL Query")
-            st.code(st.session_state['pg_explain'], language='sql')
-
-        if st.session_state.get('pg_explain_error') is not None:
-            st.error(st.session_state['pg_explain_error'])
+        if st.session_state['show_pg_cost_scale']:
+            with st.expander("PostgreSQL Cost Scale"):
+                st.plotly_chart(st.session_state['pg_cost_scale_fig'], use_container_width=True, key="pg_cost_scale")
+                if st.button("Hide Cost Scale"):
+                    st.session_state['show_pg_cost_scale'] = False
+                    st.experimental_rerun()
 
         conn.close()
 
     except Exception as e:
-        st.error(f"❌ Error connecting to Hive Metastore PostgreSQL: {e}")
+        st.error(f"Could not connect to PostgreSQL: {e}")
