@@ -1,1 +1,7 @@
+streamlit
+pyspark==3.0.0
+pyhive
+pymysql
+psycopg2-binary
+plotly
 
