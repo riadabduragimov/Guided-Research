@@ -125,13 +125,13 @@ def explain_plan_text(plan_text: str) -> str:
     if "BroadcastHashJoin" in plan_text:
         explanations.append(" **BroadcastHashJoin**: One table is broadcasted to all nodes. Reduces shuffle cost.")
     if "ShuffleHashJoin" in plan_text:
-        explanations.append(" **ShuffleHashJoin**: Requires shuffling both sides of the join. ❗ Can lead to high I/O and memory use.")
+        explanations.append(" **ShuffleHashJoin**: Requires shuffling both sides of the join. Can lead to high I/O and memory use.")
     if "SortMergeJoin" in plan_text:
         explanations.append(" **SortMergeJoin**: Requires sorting both sides. Good for large datasets, but costly.")
 
     # Exchange / Shuffle
     if "Exchange" in plan_text:
-        explanations.append(" **Exchange**: Redistributes data across partitions. ❗ Large exchanges may slow performance.")
+        explanations.append(" **Exchange**: Redistributes data across partitions. Large exchanges may slow performance.")
     if "BroadcastExchange" in plan_text:
         explanations.append(" **BroadcastExchange**: Distributes small table across all workers.")
     if "ReusedExchange" in plan_text:
@@ -182,6 +182,6 @@ def explain_plan_text(plan_text: str) -> str:
         explanations.append(" Cartesian Product detected — joins without keys can explode data size.")
 
     if not explanations:
-        explanations.append("⚠️ No recognizable patterns found in EXPLAIN plan.")
+        explanations.append("No recognizable patterns found in EXPLAIN plan.")
 
     return "\n".join(explanations)
