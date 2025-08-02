@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 from collections import defaultdict
 import streamlit as st
+from constants import operator_weights  
 
 def extract_operators_and_costs(plan_text):
     operators = []
@@ -42,37 +43,6 @@ def plot_cost_heatmap(operators, costs):
     return fig
 
 def visualize_hive_operator_weights(plan_text):
-    operator_weights = {
-        "CollectLimit": 1,
-        "Scan hive": 5,
-        "Filter": 2,
-        "Project": 1,
-        "Sort": 3,
-        "Aggregate": 4,
-        "Window": 4,
-        "Union": 2,
-        "Repartition": 3,
-        "Subquery": 3,
-        "MapJoin": 4,
-        "BroadcastHashJoin": 5,
-        "ShuffleHashJoin": 5,
-        "SortMergeJoin": 5,
-        "Exchange": 4,
-        "BroadcastExchange": 4,
-        "AdaptiveSparkPlan": 3,
-        "ReusedExchange": 2,
-        "DeserializeToObject": 1,
-        "SerializeFromObject": 1,
-        "WholeStageCodegen": 3,
-        "InMemoryRelation": 3,
-        "HashPartitioning": 2,
-        "RangePartitioning": 2,
-        "GlobalLimit": 1,
-        "LocalLimit": 1,
-        "SubqueryAlias": 2,
-        "CommandResult": 1
-    }
-
     operator_counts = defaultdict(int)
     for op in operator_weights.keys():
         count = len(re.findall(op, plan_text, re.IGNORECASE))
@@ -80,7 +50,7 @@ def visualize_hive_operator_weights(plan_text):
             operator_counts[op] += count
 
     if not operator_counts:
-        st.warning("No operators detected in the Hive EXPLAIN plan.")
+        st.warning("No operators detected in the EXPLAIN plan.")
         return None
 
     operator_scores = {op: count * operator_weights[op] for op, count in operator_counts.items()}
@@ -95,7 +65,7 @@ def visualize_hive_operator_weights(plan_text):
     fig = px.bar(
         df, x="Operator", y="Weighted Score",
         color="Operator",
-        title="Heuristic Weighted Operator Costs (Hive EXPLAIN)",
+        title="Heuristic Weighted Operator Costs",
         text="Weighted Score"
     )
     fig.update_layout(
