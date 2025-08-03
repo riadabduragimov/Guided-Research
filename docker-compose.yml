@@ -205,7 +205,7 @@ services:
       - "8501:8501"
     volumes:
       - ./streamlit_app:/app
-      - ./base/spark-3.0.0-bin-hadoop3.2/spark-3.0.0-bin-hadoop3.2:/opt/spark          # Your Spark binaries here
+      - ./base/spark-3.0.0-bin-hadoop3.2/spark-3.0.0-bin-hadoop3.2:/opt/spark          
       - ./base/spark_conf/hadoop:/etc/hadoop/conf/
       - ./base/spark_conf/hive/hive-site.xml:/opt/spark/conf/hive-site.xml
     environment:
