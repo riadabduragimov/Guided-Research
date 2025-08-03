@@ -108,7 +108,7 @@ Assess how well the system supports users in understanding and optimizing their 
 
 The architecture of the proposed system is designed to provide a fast, scalable, and explainable SQL query processing environment by leveraging modern distributed computing frameworks and a user-friendly interface. The system integrates Apache Spark, Hive, Hadoop HDFS, and Streamlit, orchestrated through a containerized environment for modularity and scalability.
 
-🔧 Core Components:
+ Core Components:
 1. User Interface (Streamlit + JupyterLab)
 
 Users interact with the system through a Streamlit web application that includes a SQL editor.
