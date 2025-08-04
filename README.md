@@ -22,9 +22,11 @@
 11. [Evaluation and Results](#evaluation-and-results)
 12. [Discussion](#discussion)
 13. [Limitations and Challenges](#limitations-and-challenges)
-14. [Future Work](#future-work)
-15. [Conclusion](#conclusion)
-16. [References](#references)
+14. [How to Run Project](#how-to-run-project)
+15. [Future Work](#future-work)
+16. [Conclusion](#conclusion)
+17. [References](#references)
+    
 
 ---
 
@@ -113,6 +115,60 @@ The system balances between simplicity and completeness. By avoiding large model
 - Hardcoded templates may fail for edge cases
 - Plan format changes between Hive versions could break rules
 
+## How to Run Project
+To run this rule-based natural language explanation system for SQL query plans, follow the steps below. The system is fully containerized using Docker Compose and includes Hive, Spark, HDFS, and a Streamlit-based frontend.
+
+### Prerequisites
+
+- Docker installed ([Download Docker](https://docs.docker.com/get-docker/))
+- Docker Compose installed (comes with Docker Desktop)
+  
+### Step-by-Step Setup
+1. **Clone the repository**
+   ```bash
+   git clone <your-repo-url>
+   cd <project-folder>
+2. **Start all containers using Docker Compose**
+   ```bash
+   docker-compose up --build
+This will:
+
+- Spin up containers for HDFS, Hive, and Spark  
+- Build the custom Streamlit container from `streamlit_app/Dockerfile`  
+- Expose the Streamlit UI at [http://localhost:8501](http://localhost:8501)
+
+### Access the Web UI  
+Open your browser and navigate to:  
+[http://localhost:8501](http://localhost:8501)
+
+### Use the App  
+- Paste a SQL query execution plan from Hive  
+- View the natural language explanation  
+- Explore the query execution tree and cost visualization
+
+---
+
+### Developer Notes
+
+**Rules and Logic**  
+All rule-matching and explanation templates are located in the `streamlit_app/` folder.
+
+**Hive + Spark Configuration**  
+Hive uses Spark as its execution engine and is configured via files in the `base/` directory.
+
+**Images and Diagrams**  
+The `img/` folder contains architecture diagrams and pipeline images you can use in documentation or presentations.
+
+---
+
+### Cleanup
+
+To stop and remove containers, volumes, and networks:
+
+```bash
+docker-compose down -v
+```
+
 ## Future Work
 - Add multilingual explanation support
 - Extend rules to support more SQL dialects
@@ -121,6 +177,7 @@ The system balances between simplicity and completeness. By avoiding large model
 
 ## Conclusion
 This project offers an educational and practical tool that improves explainability and debugging in both academic and production environments. Beneficiaries include students, educators, data analysts, engineers, and big data practitioners who seek a clearer, more interpretable, and lightweight approach to understanding and optimizing SQL queries without relying on black-box AI tools.
+
 
 ## References
 1. Apache Hive Documentation  
