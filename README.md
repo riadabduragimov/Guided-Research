@@ -126,8 +126,8 @@ To run this rule-based natural language explanation system for SQL query plans, 
 ### Step-by-Step Setup
 1. **Clone the repository**
    ```bash
-   git clone <your-repo-url>
-   cd <project-folder>
+   git clone https://github.com/riadabduragimov/Guided-Research
+   cd Guided-Research
 2. **Start all containers using Docker Compose**
    ```bash
    docker-compose up --build
@@ -180,11 +180,9 @@ This project offers an educational and practical tool that improves explainabili
 
 
 ## References
-1. Apache Hive Documentation  
-2. Apache Spark SQL Guide  
-3. TPC-H Benchmark  
-4. Relevant academic papers on SQL-to-text conversion and query plan explanation
-
+1. [Apache Hive Documentation](https://cwiki.apache.org/confluence/display/Hive/Home)  
+2. [Apache Spark SQL Guide](https://spark.apache.org/docs/latest/sql-programming-guide.html)  
+3. [TPC-H Benchmark](https://www.tpc.org/tpch/)
 
 
 
