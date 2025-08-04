@@ -22,7 +22,7 @@
 11. [Evaluation and Results](#evaluation-and-results)
 12. [Discussion](#discussion)
 13. [Limitations and Challenges](#limitations-and-challenges)
-14. [How to Run Project](#how-to-run-project)
+14. [How to Run the Project](#how-to-run-the-project)
 15. [Future Work](#future-work)
 16. [Conclusion](#conclusion)
 17. [References](#references)
@@ -115,7 +115,7 @@ The system balances between simplicity and completeness. By avoiding large model
 - Hardcoded templates may fail for edge cases
 - Plan format changes between Hive versions could break rules
 
-## How to Run Project
+## How to Run the Project
 To run this rule-based natural language explanation system for SQL query plans, follow the steps below. The system is fully containerized using Docker Compose and includes Hive, Spark, HDFS, and a Streamlit-based frontend.
 
 ### Prerequisites
